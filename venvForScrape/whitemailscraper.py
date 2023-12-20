@@ -1,0 +1,18 @@
+import scrapy
+
+
+class WhitemailscraperSpider(scrapy.Spider):
+    name = "whitemailscraper"
+    allowed_domains = ["chocolate.co.uk"]
+    start_urls = ["https://www.chocolate.co.uk/collections/all"]
+
+    def parse(self, response):
+        #here we are looping through the products and extracting the name, price & url
+        products = response.css('product-item')
+        for product in products:
+            #here we put the data returned into the format we want to output for our csv or json file
+            yield{
+                'name' : product.css('a.product-item-meta__title::text').get(),
+                'price' : product.css('span.price').get().replace('<span class="price">\n              <span class="visually-hidden">Sale price</span>','').replace('</span>',''),
+                'url' : product.css('div.product-item-meta a').attrib['href'],
+            }
