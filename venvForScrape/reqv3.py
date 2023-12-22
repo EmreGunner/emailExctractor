@@ -117,8 +117,9 @@ url_count = len(urls)
 
 for url in urls:
     logging.info("%s URL COUNT ",url_count)
+    url_count -= 1
     if(url not in checked_websites):
-        print("%s URL COUNT ",url_count) 
+        print("URL COUNT :",url_count) 
         checked_websites.append(url)       
         domain = get_domain(url)
         logging.info("%s CHECKING ",url)
@@ -146,5 +147,6 @@ for url in urls:
             save_errored_website(url,emails="",domain=domain,error="could not reach site")
     else:
         logging.info("%s SKIPPING URL, IT ALREADY EXISTS ",url)
+        url_count = (url_count  - 1)
         continue
-    url_count = (url_count  - 1)
+        

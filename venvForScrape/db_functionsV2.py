@@ -8,7 +8,7 @@ logging.basicConfig(filename='app.log', filemode='w', format='%(asctime)s - %(me
 def read_unchecked_websites():
     conn = sqlite3.connect('website_leads.db')
     cur = conn.cursor()
-    cur.execute('SELECT website FROM gmaps_lawyers_all')
+    cur.execute('SELECT website FROM competitors_raw_table WHERE website IS NOT NULL')
     rows = cur.fetchall()
     urls = [row[0] for row in rows]
     conn.close()   
@@ -182,6 +182,25 @@ def get_status():
     return status_obj
     # Execute the query
 
+def not_send_mails():
+    query_not_send_mails = "SELECT * FROM emails WHERE email <> '' AND email IS NOT NULL"
+    not_send_mails = sql_executer_fetch_all(query_not_send_mails)
+    return not_send_mails
+def sql_executer_fetch_all(query):
+    # Connect to the SQLite database
+    conn = sqlite3.connect('website_leads.db')
+    cur = conn.cursor()
+    try:
+        cur.execute(query)
+        ret = cur.fetchall()
+    except sqlite3.Error as e:
+        print(f"An error occurred: {e}")
+        ret = None
+    finally:
+        # Close the database connection
+        conn.close()
+    return ret
+
 def sql_executer(query):
     # Connect to the SQLite database
     conn = sqlite3.connect('website_leads.db')
@@ -197,10 +216,12 @@ def sql_executer(query):
         conn.close()
     return count
 
-status = get_status()
-print(status)
+
+#status = get_status()
+#print(status)
 #test_func()
 #difference = check_difference()
 #stat_mail = emails_per_domain()
 #print(stat_mail)
 #res_check = check_value(val="http://www.kivamhukuk.com/",col="website",table="emails")
+print(read_unchecked_websites())
