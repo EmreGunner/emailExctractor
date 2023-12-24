@@ -111,7 +111,7 @@ def process_href(href, url):
         print(f"Error while processing link: {href}")
         logging.error(f"Error message: {e}")
     
-urls = fix_urls(unchecked_websites)
+urls = fix_urls(unchecked_websites[:10])
 print(urls)
 url_count = len(urls)
 

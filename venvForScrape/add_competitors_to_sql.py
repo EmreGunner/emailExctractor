@@ -5,7 +5,7 @@ import sqlite3
 #csv_file_path = '/home/titan/Desktop/Bussiness/SoftwareTools/LeadGeneration/EmailExtractor/venvForScrape/input/test2 - compatitors_table2.csv'  # Replace with your CSV file path
 
 
-df = pd.read_csv(csv_file_path)
+#df = pd.read_csv(csv_file_path)
 
 # Step 2: Create or connect to an SQLite database
 def add_df_to_sql(df):
@@ -21,7 +21,7 @@ def added_status_m():
     cursor = conn.cursor()
 
     # SQL query to update the values in the added_status_m column to 1
-    update_query = "UPDATE competitors_raw_table SET added_status_m = 1"
+    update_query = "UPDATE competitors_raw_table SET added_status_m = 1 "
     try:
         cursor.execute(update_query)
         conn.commit()  # Commit the changes
@@ -56,6 +56,6 @@ def add_csv_to_sqlite(csv_file_path, db_file_path='website_leads.db'):
     print(f"Data from {csv_file_path} added to {table_name} in SQLite database.")
 
 #add_df_to_sql(df)
-# added_status_m()
-csv_file = "/home/titan/Desktop/Python/ForMarketing/google-maps-scraper/output/test-5/csv/places-of-test-5.csv"
+#added_status_m()
+csv_file = "/home/titan/Desktop/Python/ForMarketing/google-maps-scraper/output/test-6/csv/places-of-test-6.csv"
 add_csv_to_sqlite(csv_file)

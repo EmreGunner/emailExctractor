@@ -84,7 +84,7 @@ if __name__ == "__main__":
     print("gmaps table_count: ",gmaps_table.count())
     merged_Df = vlookup_mails(email_table,gmaps_table)
     print(merged_Df)
-    output_file = 'merged_output.csv'  # Define your desired output file name
+    #output_file = 'merged_output.csv'  # Define your desired output file name
     # Set index=False to not include the index in the CSV
 
-    merged_Df.to_csv(output_file,index=False)
+    #merged_Df.to_csv(output_file,index=False)

@@ -8,12 +8,24 @@ logging.basicConfig(filename='app.log', filemode='w', format='%(asctime)s - %(me
 def read_unchecked_websites():
     conn = sqlite3.connect('website_leads.db')
     cur = conn.cursor()
-    cur.execute('SELECT website FROM competitors_raw_table WHERE website IS NOT NULL')
+    cur.execute('SELECT website FROM competitors_raw_table WHERE website IS NOT NULL AND added_status_m <> 1')
     rows = cur.fetchall()
     urls = [row[0] for row in rows]
     conn.close()   
     return urls
     # Add the scheme to the URLs
+
+def read_unchecked_from_merged():
+    conn = sqlite3.connect('website_leads.db')
+    cur = conn.cursor()
+    cur.execute('SELECT website FROM merged_result WHERE website IS NOT NULL AND email IS NULL OR email IS "could not reach site" OR email is "" ')
+    rows = cur.fetchall()
+    urls = [row[0] for row in rows]
+    conn.close()   
+    return urls
+    # Add the scheme to the URLs
+
+
 
 def read_checked_websites():
     conn = sqlite3.connect('website_leads.db')
@@ -60,25 +72,93 @@ def save_emails_to_db(website, emails,domain = "",error = ""):
     print("---------------SAVED----------------------------")
     print(website, emails, time.strftime("%Y-%m-%d %H:%M:%S"))
 
-def save_errored_website(website, emails,domain="",error=""):
-    # Connect to the SQLite database (or create it if it doesn't exist)
-    logging.error('%s raised an error',website)
-    conn = sqlite3.connect('website_leads.db')
-
-    # Create a cursor object to execute SQL commands
-    cur = conn.cursor()
-    # Create the 'emails' table if it doesn't exist
-    cur.execute('''CREATE TABLE IF NOT EXISTS emails (website TEXT, email TEXT, last_scanned TEXT, domain TEXT, error TEXT)''')
-    # Insert the emails into the SQLite database
-
+def save_emails_to_merged_result(website, emails, domain="", error="", is_sub_page=False, main_website_url=None):
+    conn = None
     try:
-        cur.execute('''INSERT INTO emails (website, email, last_scanned,domain,error) VALUES (?, ?, ?, ?, ?)''', (website, emails, time.strftime("%Y-%m-%d %H:%M:%S"),domain,error))
-    except:
-        cur.execute('''INSERT INTO emails (website, email, last_scanned,domain,error) VALUES (?, ?, ?, ?, ?)''', (website,"", time.strftime("%Y-%m-%d %H:%M:%S"),domain,error))    
-    
-    conn.commit()
-    conn.close()
+        # Connect to the SQLite database
+        conn = sqlite3.connect('website_leads.db')
+        cur = conn.cursor()
+        current_time = time.strftime("%Y-%m-%d %H:%M:%S")
 
+        if is_sub_page and main_website_url:
+            # Retrieve data from the main website's row
+            cur.execute('SELECT * FROM merged_result WHERE website = ?', (main_website_url,))
+            main_website_data = cur.fetchone()
+
+            if main_website_data:
+                # Create a new row with the existing data except for website, emails, domain, and error
+                cur.execute('''
+                    INSERT INTO merged_result (place_id, name, main_category, rating, reviews, website, phone, 
+                                               address, link, is_spending_on_ads, email, last_scanned, domain, error)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    main_website_data[0], main_website_data[1], main_website_data[2], main_website_data[3],
+                    main_website_data[4], website, main_website_data[6], main_website_data[7],
+                    main_website_data[8], main_website_data[9], ', '.join(emails) if isinstance(emails, list) else emails,
+                    current_time, domain, error
+                ))
+        else:
+            email_str = ', '.join(emails) if isinstance(emails, list) else emails
+            # Check if website already exists
+            cur.execute('SELECT COUNT(*) FROM merged_result WHERE website = ?', (website,))
+            if cur.fetchone()[0] > 0:
+                # Update existing record
+                cur.execute('''
+                    UPDATE merged_result 
+                    SET email = ?, domain = ?, error = ?, last_scanned = ?
+                    WHERE website = ?
+                ''', (email_str, domain, error, current_time, website))
+            else:
+                # Insert new record
+                cur.execute('''
+                    INSERT INTO merged_result (website, email, domain, error, last_scanned)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (website, email_str, domain, error, current_time))
+
+        conn.commit()
+        logging.info(f"Data successfully updated for website: {website}")
+
+    except sqlite3.Error as e:
+        logging.error(f"SQLite error in save_emails_to_merged_result: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+# Example usage
+#logging.basicConfig(filename='app.log', level=logging.INFO)
+#save_emails_to_merged_result('example.com', ['email@example.com'], 'example.com', 'No error')
+def save_errored_website(website, domain, error):
+    conn = None
+    try:
+        # Connect to the SQLite database
+        conn = sqlite3.connect('website_leads.db')
+        cur = conn.cursor()
+        current_time = time.strftime("%Y-%m-%d %H:%M:%S")
+
+        # Check if website already exists
+        cur.execute('SELECT COUNT(*) FROM merged_result WHERE website = ?', (website,))
+        if cur.fetchone()[0] > 0:
+            # Update existing record
+            cur.execute('''
+                UPDATE merged_result 
+                SET domain = ?, error = ?, last_scanned = ?
+                WHERE website = ?
+            ''', (domain, error, current_time, website))
+        else:
+            # Insert new record
+            cur.execute('''
+                INSERT INTO merged_result (website, domain, error, last_scanned)
+                VALUES (?, ?, ?, ?)
+            ''', (website, domain, error, current_time))
+
+        conn.commit()
+        logging.info(f"Error data successfully saved for website: {website}")
+
+    except sqlite3.Error as e:
+        logging.error(f"SQLite error in save_errored_website: {e}")
+    finally:
+        if conn:
+            conn.close()
 def check_url_exist_db(website):
     # Connect to the SQLite database (or create it if it doesn't exist)
     conn = sqlite3.connect('website_leads.db')
@@ -215,13 +295,32 @@ def sql_executer(query):
         # Close the database connection
         conn.close()
     return count
+def add_unique_constraint_to_website():
+    conn = None
+    try:
+        conn = sqlite3.connect('website_leads.db')
+        cur = conn.cursor()
 
+        # Add a unique constraint to the 'website' column
+        cur.execute('''
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_website_unique ON merged_result (website)
+        ''')
+        conn.commit()
+        logging.info("Unique index on 'website' column created successfully.")
 
-#status = get_status()
-#print(status)
+    except sqlite3.Error as e:
+        logging.error(f"SQLite error in add_unique_constraint_to_website: {e}")
+        raise
+    finally:
+        if conn:
+            conn.close()
+
+status = get_status()
+print(status)
 #test_func()
 #difference = check_difference()
 #stat_mail = emails_per_domain()
 #print(stat_mail)
 #res_check = check_value(val="http://www.kivamhukuk.com/",col="website",table="emails")
-print(read_unchecked_websites())
+#print(read_unchecked_websites())
+#add_unique_constraint_to_website()
