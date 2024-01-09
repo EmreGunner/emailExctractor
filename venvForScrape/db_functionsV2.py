@@ -18,14 +18,12 @@ def read_unchecked_websites():
 def read_unchecked_from_merged():
     conn = sqlite3.connect('website_leads.db')
     cur = conn.cursor()
-    cur.execute('SELECT website FROM merged_result WHERE website IS NOT NULL AND email IS NULL OR email IS "could not reach site" OR email is "" ')
+    cur.execute('SELECT website FROM merged_result WHERE website IS NOT NULL AND email IS NULL OR email IS "could not reach site" OR email is "" AND recheck_status = 0 ')
     rows = cur.fetchall()
     urls = [row[0] for row in rows]
     conn.close()   
     return urls
     # Add the scheme to the URLs
-
-
 
 def read_checked_websites():
     conn = sqlite3.connect('website_leads.db')
@@ -114,7 +112,8 @@ def save_emails_to_merged_result(website, emails, domain="", error="", is_sub_pa
                     INSERT INTO merged_result (website, email, domain, error, last_scanned)
                     VALUES (?, ?, ?, ?, ?)
                 ''', (website, email_str, domain, error, current_time))
-
+          # After inserting or updating the record, update recheck_status
+        cur.execute('UPDATE merged_result SET recheck_status = 1 WHERE website = ?', (website,))
         conn.commit()
         logging.info(f"Data successfully updated for website: {website}")
 
@@ -130,12 +129,11 @@ def save_emails_to_merged_result(website, emails, domain="", error="", is_sub_pa
 def save_errored_website(website, domain, error):
     conn = None
     try:
-        # Connect to the SQLite database
         conn = sqlite3.connect('website_leads.db')
         cur = conn.cursor()
         current_time = time.strftime("%Y-%m-%d %H:%M:%S")
 
-        # Check if website already exists
+        # Check if website already exists in the database
         cur.execute('SELECT COUNT(*) FROM merged_result WHERE website = ?', (website,))
         if cur.fetchone()[0] > 0:
             # Update existing record
@@ -150,13 +148,16 @@ def save_errored_website(website, domain, error):
                 INSERT INTO merged_result (website, domain, error, last_scanned)
                 VALUES (?, ?, ?, ?)
             ''', (website, domain, error, current_time))
-
+          # After inserting or updating the record, update recheck_status
+        cur.execute('UPDATE merged_result SET recheck_status = 1 WHERE website = ?', (website,))
+    
         conn.commit()
         logging.info(f"Error data successfully saved for website: {website}")
 
     except sqlite3.Error as e:
         logging.error(f"SQLite error in save_errored_website: {e}")
     finally:
+        
         if conn:
             conn.close()
 def check_url_exist_db(website):
@@ -169,6 +170,19 @@ def check_url_exist_db(website):
     urls = [row[0] for row in rows]
     conn.close()   
     if website in urls:
+        return True
+    else:
+        return False
+def is_rechecked(website):
+    # Connect to the SQLite database (or create it if it doesn't exist)
+    conn = sqlite3.connect('website_leads.db')
+    # Create a cursor object to execute SQL commands
+    cur = conn.cursor()
+    cur.execute('SELECT recheck_status FROM merged_result WHERE website = ?', (website,))
+    result = cur.fetchone()
+    conn.close()   
+    #print(result)
+    if (result[0]==1):
         return True
     else:
         return False
@@ -314,7 +328,22 @@ def add_unique_constraint_to_website():
     finally:
         if conn:
             conn.close()
+def reset_recheck_status():
+    conn = None
+    try:
+        conn = sqlite3.connect('website_leads.db')
+        cur = conn.cursor()
 
+        # SQL query to update recheck_status to 0 for all rows
+        cur.execute('UPDATE merged_result SET recheck_status = 0')
+        conn.commit()
+        logging.info("Recheck status reset for all records in merged_result.")
+    
+    except sqlite3.Error as e:
+        logging.error(f"SQLite error in reset_recheck_status: {e}")
+    finally:
+        if conn:
+            conn.close()
 status = get_status()
 print(status)
 #test_func()
@@ -324,3 +353,5 @@ print(status)
 #res_check = check_value(val="http://www.kivamhukuk.com/",col="website",table="emails")
 #print(read_unchecked_websites())
 #add_unique_constraint_to_website()
+#reset_recheck_status()
+#print(is_rechecked("http://www.selverakkoyunkorkmaz.av.tr/"))

@@ -63,18 +63,33 @@ def get_page(url):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
     }
     try:
-        logging.info('%s requesting page : ',url)
-        response =  requests.get(url,headers=headers,timeout=6)
+      # Preprocess URL
+        if not isinstance(url, str):
+            error_message = f'Invalid URL type: {type(url)}'
+            logging.error(error_message)
+            return None, error_message
+
+        # Trim whitespace and ensure proper URL encoding
+        url = url.strip()
+        url = requests.utils.requote_uri(url)
+
+        # Prefer HTTPS if not already in URL
+        if not url.startswith("https://"):
+            url = url.replace("http://", "https://", 1)
+
+        logging.info('%s requesting page : ', url)
+        response = requests.get(url, headers=headers, timeout=6)
         if response.status_code == 200:
             content = response.text
-            return content
+            return content,None
         else:
+            error_message = f'Error {response.status_code} while getting page from {url}'
             logging.error('Error %d while getting page from %s',response.status_code,url)
-            return None
-    except:
-        print("Failed to load the webpage:", url)
-        #error should go to db
-        return None
+            return None,error_message
+    except Exception as e:
+        error_message = f'Exception occurred: {str(e)}'
+        logging.error(error_message)
+        return None, error_message
 def get_href_links(html):
     logging.info("getting sub pages")
     soup = BeautifulSoup(html, 'html.parser')
@@ -88,13 +103,17 @@ def process_href(href, main_url):
     """
     # Check if the href has a valid URL schema or is a relative path
     url = main_url
+       # Check if the href has a valid URL schema or is a relative path
     if not check_url_schema(href):
         if href.startswith('/'):
-            base_url = f'{urlsplit(url).scheme}://{urlsplit(url).netloc}'
+            base_url = f'{urlsplit(main_url).scheme}://{urlsplit(main_url).netloc}'
             href = base_url + href
         else:
-            logging.info("%s BAD LINK CHECK SUBPAGE", href)
-            return
+            # Handling relative URLs (e.g., 'contact-us')
+            base_url = f'{urlsplit(main_url).scheme}://{urlsplit(main_url).netloc}{urlsplit(main_url).path.rsplit("/", 1)[0]}'
+            if not base_url.endswith('/'):
+                base_url += '/'
+            href = base_url + href
      # Log and skip processing if the href is already checked or exists in the database
     if href in checked_websites or href == url:
         logging.info("%s SKIPPING URL, IT ALREADY EXISTS ", href)
@@ -110,12 +129,12 @@ def process_href(href, main_url):
             save_emails_to_merged_result(website=href, emails=mails,domain= get_domain(href),is_sub_page=True,main_website_url=main_url)  
         else:
             logging.info(f"Error with subpage {href}")
-            save_errored_website(href, error="could n   ot reach site",main_url=main_url)
+            save_errored_website(href, error="could not reach site",main_url=main_url)
     except Exception as e:
         print(f"Error while processing link: {href}")
-        logging.error(f"Error message: {e}")
+        logging.error(f"Error while processing link: {href} Error message: {e}")
     
-urls = fix_urls(unchecked_websites[10:21])
+urls = fix_urls(unchecked_websites)
 print(urls)
 url_count = len(urls)
 
@@ -128,14 +147,14 @@ for url in urls:
         domain = get_domain(url)
         logging.info("%s CHECKING ",url)
         #skipped checking db
-        #if(check_url_exist_db(url)):
-            #logging.info("%s SKIPPING URL, IT ALREADY EXISTS IN DB",url)
-            #print("%s SKIPPING URL, IT ALREADY EXISTS IN DB",url)
-            #continue
+        if(is_rechecked(url)):
+            logging.info("%s SKIPPING URL, IT ALREADY EXISTS IN DB",url)
+            print("%s SKIPPING URL, IT ALREADY EXISTS IN DB",url)
+            continue
         if "instagram.com" in url:
             continue
         logging.info("%s URL NOT EXISTS ",url)
-        html = get_page(url)
+        html, error_message = get_page(url)
         if(html):
             print(f"extracting emails from website {url}")
             mails = extractor.extract_mails(html)
@@ -150,8 +169,8 @@ for url in urls:
                         process_href(href=href,main_url=url)
         else:
             print(f"there was a error with {url}")
-            logging.info(f"there was a error with {url}")
-            save_errored_website(url,domain=domain,error="could not reach site")
+            logging.error(f'Error with {url}: {error_message}')
+            save_errored_website(url, domain=domain, error=error_message)
     else:
         print("%s SKIPPING URL, IT ALREADY EXISTS IN CACHE (LIST) ",url)
         logging.info("%s SKIPPING URL, IT ALREADY EXISTS IN CACHE ",url)
